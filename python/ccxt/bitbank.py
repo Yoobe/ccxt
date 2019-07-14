@@ -5,7 +5,6 @@
 
 from ccxt.base.exchange import Exchange
 from ccxt.base.errors import ExchangeError
-from ccxt.base.errors import NotSupported
 from ccxt.base.errors import AuthenticationError
 from ccxt.base.errors import PermissionDenied
 from ccxt.base.errors import InsufficientFunds
@@ -20,14 +19,14 @@ class bitbank (Exchange):
         return self.deep_extend(super(bitbank, self).describe(), {
             'id': 'bitbank',
             'name': 'bitbank',
-            'countries': 'JP',
+            'countries': ['JP'],
             'version': 'v1',
             'has': {
                 'fetchOHLCV': True,
                 'fetchOpenOrders': True,
                 'fetchMyTrades': True,
-                # 'fetchDepositAddress': True,
-                # 'withdraw': True,
+                'fetchDepositAddress': True,
+                'withdraw': True,
             },
             'timeframes': {
                 '1m': '1min',
@@ -57,8 +56,8 @@ class bitbank (Exchange):
                         '{pair}/ticker',
                         '{pair}/depth',
                         '{pair}/transactions',
-                        '{pair}/transactions/{YYYYMMDD}',
-                        '{pair}/candlestick/{candle-type}/{YYYYMMDD}',
+                        '{pair}/transactions/{yyyymmdd}',
+                        '{pair}/candlestick/{candletype}/{yyyymmdd}',
                     ],
                 },
                 'private': {
@@ -79,20 +78,19 @@ class bitbank (Exchange):
                 },
             },
             'markets': {
-                'BCH/BTC': {'id': 'bcc_btc', 'symbol': 'BCH/BTC', 'base': 'BCH', 'quote': 'BTC', 'baseId': 'BCC'},
-                'BCH/JPY': {'id': 'bcc_jpy', 'symbol': 'BCH/JPY', 'base': 'BCH', 'quote': 'JPY', 'baseId': 'BCC'},
-                'MONA/BTC': {'id': 'mona_btc', 'symbol': 'MONA/BTC', 'base': 'MONA', 'quote': 'BTC'},
-                'MONA/JPY': {'id': 'mona_jpy', 'symbol': 'MONA/JPY', 'base': 'MONA', 'quote': 'JPY'},
-                'ETH/BTC': {'id': 'eth_btc', 'symbol': 'ETH/BTC', 'base': 'ETH', 'quote': 'BTC'},
-                'LTC/BTC': {'id': 'ltc_btc', 'symbol': 'LTC/BTC', 'base': 'LTC', 'quote': 'BTC'},
-                'XRP/JPY': {'id': 'xrp_jpy', 'symbol': 'XRP/JPY', 'base': 'XRP', 'quote': 'JPY'},
-                'BTC/JPY': {'id': 'btc_jpy', 'symbol': 'BTC/JPY', 'base': 'BTC', 'quote': 'JPY'},
+                'BCH/BTC': {'id': 'bcc_btc', 'symbol': 'BCH/BTC', 'base': 'BCH', 'quote': 'BTC', 'baseId': 'bcc', 'quoteId': 'btc'},
+                'BCH/JPY': {'id': 'bcc_jpy', 'symbol': 'BCH/JPY', 'base': 'BCH', 'quote': 'JPY', 'baseId': 'bcc', 'quoteId': 'jpy'},
+                'MONA/BTC': {'id': 'mona_btc', 'symbol': 'MONA/BTC', 'base': 'MONA', 'quote': 'BTC', 'baseId': 'mona', 'quoteId': 'btc'},
+                'MONA/JPY': {'id': 'mona_jpy', 'symbol': 'MONA/JPY', 'base': 'MONA', 'quote': 'JPY', 'baseId': 'mona', 'quoteId': 'jpy'},
+                'ETH/BTC': {'id': 'eth_btc', 'symbol': 'ETH/BTC', 'base': 'ETH', 'quote': 'BTC', 'baseId': 'eth', 'quoteId': 'btc'},
+                'LTC/BTC': {'id': 'ltc_btc', 'symbol': 'LTC/BTC', 'base': 'LTC', 'quote': 'BTC', 'baseId': 'ltc', 'quoteId': 'btc'},
+                'XRP/JPY': {'id': 'xrp_jpy', 'symbol': 'XRP/JPY', 'base': 'XRP', 'quote': 'JPY', 'baseId': 'xrp', 'quoteId': 'jpy'},
+                'BTC/JPY': {'id': 'btc_jpy', 'symbol': 'BTC/JPY', 'base': 'BTC', 'quote': 'JPY', 'baseId': 'btc', 'quoteId': 'jpy'},
             },
             'fees': {
                 'trading': {
-                    # only temporarily
-                    'maker': 0.0,
-                    'taker': 0.0,
+                    'maker': -0.02 / 100,
+                    'taker': 0.12 / 100,
                 },
                 'funding': {
                     'withdraw': {
@@ -110,21 +108,40 @@ class bitbank (Exchange):
                 'price': 8,
                 'amount': 8,
             },
+            'exceptions': {
+                '20001': AuthenticationError,
+                '20002': AuthenticationError,
+                '20003': AuthenticationError,
+                '20005': AuthenticationError,
+                '20004': InvalidNonce,
+                '40020': InvalidOrder,
+                '40021': InvalidOrder,
+                '40025': ExchangeError,
+                '40013': OrderNotFound,
+                '40014': OrderNotFound,
+                '50008': PermissionDenied,
+                '50009': OrderNotFound,
+                '50010': OrderNotFound,
+                '60001': InsufficientFunds,
+                '60005': InvalidOrder,
+            },
         })
 
     def parse_ticker(self, ticker, market=None):
-        symbol = market['symbol']
-        timestamp = ticker['timestamp']
-        last = float(ticker['last'])
+        symbol = None
+        if market is not None:
+            symbol = market['symbol']
+        timestamp = self.safe_integer(ticker, 'timestamp')
+        last = self.safe_float(ticker, 'last')
         return {
             'symbol': symbol,
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
-            'high': float(ticker['high']),
-            'low': float(ticker['low']),
-            'bid': float(ticker['buy']),
+            'high': self.safe_float(ticker, 'high'),
+            'low': self.safe_float(ticker, 'low'),
+            'bid': self.safe_float(ticker, 'buy'),
             'bidVolume': None,
-            'ask': float(ticker['sell']),
+            'ask': self.safe_float(ticker, 'sell'),
             'askVolume': None,
             'vwap': None,
             'open': None,
@@ -134,7 +151,7 @@ class bitbank (Exchange):
             'change': None,
             'percentage': None,
             'average': None,
-            'baseVolume': float(ticker['vol']),
+            'baseVolume': self.safe_float(ticker, 'vol'),
             'quoteVolume': None,
             'info': ticker,
         }
@@ -142,42 +159,56 @@ class bitbank (Exchange):
     def fetch_ticker(self, symbol, params={}):
         self.load_markets()
         market = self.market(symbol)
-        response = self.publicGetPairTicker(self.extend({
+        request = {
             'pair': market['id'],
-        }, params))
+        }
+        response = self.publicGetPairTicker(self.extend(request, params))
         return self.parse_ticker(response['data'], market)
 
     def fetch_order_book(self, symbol, limit=None, params={}):
         self.load_markets()
-        response = self.publicGetPairDepth(self.extend({
+        request = {
             'pair': self.market_id(symbol),
-        }, params))
-        orderbook = response['data']
-        return self.parse_order_book(orderbook, orderbook['timestamp'])
+        }
+        response = self.publicGetPairDepth(self.extend(request, params))
+        orderbook = self.safe_value(response, 'data', {})
+        timestamp = self.safe_integer(orderbook, 'timestamp')
+        return self.parse_order_book(orderbook, timestamp)
 
     def parse_trade(self, trade, market=None):
-        timestamp = trade['executed_at']
-        price = float(trade['price'])
-        amount = float(trade['amount'])
-        symbol = market['symbol']
-        cost = self.cost_to_precision(symbol, price * amount)
-        id = self.safe_string(trade, 'transaction_id')
-        if not id:
-            id = self.safe_string(trade, 'trade_id')
+        timestamp = self.safe_integer(trade, 'executed_at')
+        symbol = None
+        feeCurrency = None
+        if market is not None:
+            symbol = market['symbol']
+            feeCurrency = market['quote']
+        price = self.safe_float(trade, 'price')
+        amount = self.safe_float(trade, 'amount')
+        cost = None
+        if price is not None:
+            if amount is not None:
+                cost = float(self.cost_to_precision(symbol, price * amount))
+        id = self.safe_string_2(trade, 'transaction_id', 'trade_id')
+        takerOrMaker = self.safe_string(trade, 'maker_taker')
         fee = None
-        if 'fee_amount_quote' in trade:
+        feeCost = self.safe_float(trade, 'fee_amount_quote')
+        if feeCost is not None:
             fee = {
                 'currency': market['quote'],
-                'cost': self.safe_float(trade, 'fee_amount_quote'),
+                'cost': feeCurrency,
             }
+        orderId = self.safe_string(trade, 'order_id')
+        type = self.safe_string(trade, 'type')
+        side = self.safe_string(trade, 'side')
         return {
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
             'symbol': symbol,
             'id': id,
-            'order': self.safe_string(trade, 'order_id'),
-            'type': self.safe_string(trade, 'type'),
-            'side': trade['side'],
+            'order': orderId,
+            'type': type,
+            'side': side,
+            'takerOrMaker': takerOrMaker,
             'price': price,
             'amount': amount,
             'cost': cost,
@@ -188,10 +219,11 @@ class bitbank (Exchange):
     def fetch_trades(self, symbol, since=None, limit=None, params={}):
         self.load_markets()
         market = self.market(symbol)
-        trades = self.publicGetPairTransactions(self.extend({
+        request = {
             'pair': market['id'],
-        }, params))
-        return self.parse_trades(trades['data']['transactions'], market, since, limit)
+        }
+        response = self.publicGetPairTransactions(self.extend(request, params))
+        return self.parse_trades(response['data']['transactions'], market, since, limit)
 
     def parse_ohlcv(self, ohlcv, market=None, timeframe='5m', since=None, limit=None):
         return [
@@ -209,12 +241,13 @@ class bitbank (Exchange):
         date = self.milliseconds()
         date = self.ymd(date)
         date = date.split('-')
-        response = self.publicGetPairCandlestickCandleTypeYYYYMMDD(self.extend({
+        request = {
             'pair': market['id'],
-            'candle-type': self.timeframes[timeframe],
-            'YYYYMMDD': ''.join(date),
-        }, params))
-        ohlcv = response['data']['candlestick'][0]['ohlcv']
+            'candletype': self.timeframes[timeframe],
+            'yyyymmdd': ''.join(date),
+        }
+        response = self.publicGetPairCandlestickCandletypeYyyymmdd(self.extend(request, params))
+        ohlcv = self.safe_value(response['data']['candlestick'][0], 'ohlcv')
         return self.parse_ohlcvs(ohlcv, market, timeframe, since, limit)
 
     def fetch_balance(self, params={}):
@@ -224,51 +257,63 @@ class bitbank (Exchange):
         balances = response['data']['assets']
         for i in range(0, len(balances)):
             balance = balances[i]
-            id = balance['asset']
-            currency = self.common_currency_code(id)
+            currencyId = self.safe_string(balance, 'asset')
+            code = self.safe_currency_code(currencyId)
             account = {
-                'free': float(balance['free_amount']),
-                'used': float(balance['locked_amount']),
-                'total': float(balance['onhand_amount']),
+                'free': self.safe_float(balance, 'free_amount'),
+                'used': self.safe_float(balance, 'locked_amount'),
+                'total': self.safe_float(balance, 'onhand_amount'),
             }
-            result[currency] = account
+            result[code] = account
         return self.parse_balance(result)
 
+    def parse_order_status(self, status):
+        statuses = {
+            'UNFILLED': 'open',
+            'PARTIALLY_FILLED': 'open',
+            'FULLY_FILLED': 'closed',
+            'CANCELED_UNFILLED': 'canceled',
+            'CANCELED_PARTIALLY_FILLED': 'canceled',
+        }
+        return self.safe_string(statuses, status, status)
+
     def parse_order(self, order, market=None):
+        id = self.safe_string(order, 'order_id')
         marketId = self.safe_string(order, 'pair')
         symbol = None
         if marketId and not market and(marketId in list(self.marketsById.keys())):
             market = self.marketsById[marketId]
-        if market:
+        if market is not None:
             symbol = market['symbol']
-        timestamp = self.safe_integer(order, 'ordered_at') * 1000
-        price = float(order['price'])
+        timestamp = self.safe_integer(order, 'ordered_at')
+        price = self.safe_float(order, 'price')
         amount = self.safe_float(order, 'start_amount')
         filled = self.safe_float(order, 'executed_amount')
         remaining = self.safe_float(order, 'remaining_amount')
-        cost = filled * self.safe_float(order, 'average_price')
-        status = self.safe_string(order, 'status')
-        # UNFILLED
-        # PARTIALLY_FILLED
-        # FULLY_FILLED
-        # CANCELED_UNFILLED
-        # CANCELED_PARTIALLY_FILLED
-        if status == 'FULLY_FILLED':
-            status = 'closed'
-        elif status == 'CANCELED_UNFILLED' or status == 'CANCELED_PARTIALLY_FILLED':
-            status = 'canceled'
-        else:
-            status = 'open'
+        average = self.safe_float(order, 'average_price')
+        cost = None
+        if filled is not None:
+            if average is not None:
+                cost = filled * average
+        status = self.parse_order_status(self.safe_string(order, 'status'))
+        type = self.safe_string(order, 'type')
+        if type is not None:
+            type = type.lower()
+        side = self.safe_string(order, 'side')
+        if side is not None:
+            side = side.lower()
         return {
-            'id': self.safe_string(order, 'order_id'),
+            'id': id,
             'datetime': self.iso8601(timestamp),
             'timestamp': timestamp,
+            'lastTradeTimestamp': None,
             'status': status,
             'symbol': symbol,
-            'type': order['type'],
-            'side': order['side'],
+            'type': type,
+            'side': side,
             'price': price,
             'cost': cost,
+            'average': average,
             'amount': amount,
             'filled': filled,
             'remaining': remaining,
@@ -284,33 +329,35 @@ class bitbank (Exchange):
             raise InvalidOrder(self.id + ' createOrder requires a price argument for both market and limit orders')
         request = {
             'pair': market['id'],
-            'amount': self.amount_to_string(symbol, amount),
+            'amount': self.amount_to_precision(symbol, amount),
             'price': self.price_to_precision(symbol, price),
             'side': side,
             'type': type,
         }
         response = self.privatePostUserSpotOrder(self.extend(request, params))
-        id = response['data']['order_id']
         order = self.parse_order(response['data'], market)
+        id = order['id']
         self.orders[id] = order
         return order
 
     def cancel_order(self, id, symbol=None, params={}):
         self.load_markets()
         market = self.market(symbol)
-        response = self.privatePostUserSpotCancelOrder(self.extend({
+        request = {
             'order_id': id,
             'pair': market['id'],
-        }, params))
+        }
+        response = self.privatePostUserSpotCancelOrder(self.extend(request, params))
         return response['data']
 
     def fetch_order(self, id, symbol=None, params={}):
         self.load_markets()
         market = self.market(symbol)
-        response = self.privateGetUserSpotOrder(self.extend({
+        request = {
             'order_id': id,
             'pair': market['id'],
-        }, params))
+        }
+        response = self.privateGetUserSpotOrder(self.extend(request, params))
         return self.parse_order(response['data'])
 
     def fetch_open_orders(self, symbol=None, since=None, limit=None, params={}):
@@ -319,17 +366,17 @@ class bitbank (Exchange):
         request = {
             'pair': market['id'],
         }
-        if limit:
+        if limit is not None:
             request['count'] = limit
-        if since:
+        if since is not None:
             request['since'] = int(since / 1000)
-        orders = self.privateGetUserSpotActiveOrders(self.extend(request, params))
-        return self.parse_orders(orders['data']['orders'], market, since, limit)
+        response = self.privateGetUserSpotActiveOrders(self.extend(request, params))
+        return self.parse_orders(response['data']['orders'], market, since, limit)
 
     def fetch_my_trades(self, symbol=None, since=None, limit=None, params={}):
+        self.load_markets()
         market = None
         if symbol is not None:
-            self.load_markets()
             market = self.market(symbol)
         request = {}
         if market is not None:
@@ -338,51 +385,41 @@ class bitbank (Exchange):
             request['count'] = limit
         if since is not None:
             request['since'] = int(since / 1000)
-        trades = self.privateGetUserSpotTradeHistory(self.extend(request, params))
-        return self.parse_trades(trades['data']['trades'], market, since, limit)
+        response = self.privateGetUserSpotTradeHistory(self.extend(request, params))
+        return self.parse_trades(response['data']['trades'], market, since, limit)
 
     def fetch_deposit_address(self, code, params={}):
-        #
-        # TODO: test
-        #
-        #     self.load_markets()
-        #     currency = self.currency(code)
-        #     response = self.privatePostReturnDepositAddresses(self.extend({
-        #         'asset': currency['id'],
-        #     }, params))
-        #     # Not sure about self if there could be more accounts...
-        #     accounts = response['data']['accounts']
-        #     address = self.safe_string(accounts[0], 'address')
-        #     status = 'ok' if address else 'none'
-        #     return {
-        #         'currency': currency,
-        #         'address': address,
-        #         'tag': None,
-        #         'status': status,
-        #         'info': response,
-        #     }
-        #
-        raise NotSupported(self.id + ' fetchDepositAddress is not implementednot ')
+        self.load_markets()
+        currency = self.currency(code)
+        request = {
+            'asset': currency['id'],
+        }
+        response = self.privateGetUserWithdrawalAccount(self.extend(request, params))
+        # Not sure about self if there could be more than one account...
+        accounts = response['data']['accounts']
+        address = self.safe_string(accounts[0], 'address')
+        return {
+            'currency': currency,
+            'address': address,
+            'tag': None,
+            'info': response,
+        }
 
     def withdraw(self, code, amount, address, tag=None, params={}):
-        #
-        # TODO: test
-        #
-        #     if not('uuid' in list(params.keys())):
-        #         raise ExchangeError(self.id + ' uuid is required for withdrawal')
-        #     }
-        #     self.load_markets()
-        #     currency = self.currency(code)
-        #     response = self.privatePostRequestWithdrawal(self.extend({
-        #         'asset': currency['id'],
-        #         'amount': amount,
-        #     }, params))
-        #     return {
-        #         'info': response,
-        #         'id': response['data']['txid'],
-        #     }
-        #
-        raise NotSupported(self.id + ' withdraw is not implementednot ')
+        if not('uuid' in list(params.keys())):
+            raise ExchangeError(self.id + ' uuid is required for withdrawal')
+        self.load_markets()
+        currency = self.currency(code)
+        request = {
+            'asset': currency['id'],
+            'amount': amount,
+        }
+        response = self.privatePostUserRequestWithdrawal(self.extend(request, params))
+        txid = self.safe_string(response['data'], 'txid')
+        return {
+            'info': response,
+            'id': txid,
+        }
 
     def nonce(self):
         return self.milliseconds()
@@ -480,22 +517,10 @@ class bitbank (Exchange):
                 '70004': 'We are unable to accept orders as the transaction is currently suspended',
                 '70005': 'Order can not be accepted because purchase order is currently suspended',
                 '70006': 'We can not accept orders because we are currently unsubscribed ',
+                '70009': 'We are currently temporarily restricting orders to be carried out. Please use the limit order.',
+                '70010': 'We are temporarily raising the minimum order quantity as the system load is now rising.',
             }
-            errorClasses = {
-                '20001': AuthenticationError,
-                '20002': AuthenticationError,
-                '20003': AuthenticationError,
-                '20005': AuthenticationError,
-                '20004': InvalidNonce,
-                '40020': InvalidOrder,
-                '40021': InvalidOrder,
-                '40013': OrderNotFound,
-                '40014': OrderNotFound,
-                '50008': PermissionDenied,
-                '50009': OrderNotFound,
-                '50010': OrderNotFound,
-                '60001': InsufficientFunds,
-            }
+            errorClasses = self.exceptions
             code = self.safe_string(data, 'code')
             message = self.safe_string(errorMessages, code, 'Error')
             ErrorClass = self.safe_value(errorClasses, code)

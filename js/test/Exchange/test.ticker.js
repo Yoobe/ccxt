@@ -70,7 +70,24 @@ module.exports = (exchange, ticker, method, symbol) => {
     //     ... (keys.map (key =>
     //         key + ': ' + ticker[key])))
 
-    if ((exchange.id !== 'coinmarketcap') && (exchange.id !== 'xbtce'))
-        if (ticker['bid'] && ticker['ask'])
-            assert (ticker['bid'] <= ticker['ask'])
+    if (![
+
+        'coinmarketcap',
+        'xbtce',
+        'coss',
+        'mandala',
+        'okex',
+        'southxchange', // https://user-images.githubusercontent.com/1294454/59953532-314bea80-9489-11e9-85b3-2a711ca49aa7.png
+
+    ].includes (exchange.id)) {
+
+        if (ticker['baseVolume'] || ticker['quoteVolume']) {
+            if (ticker['bid'] && ticker['ask']) {
+                assert (ticker['bid'] <= ticker['ask'], 'ticker bid is greater than ticker ask!')
+            }
+        }
+
+    }
+
+    return ticker
 }
